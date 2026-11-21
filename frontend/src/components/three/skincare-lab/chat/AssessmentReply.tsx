@@ -24,6 +24,7 @@ export default function AssessmentReply({ data }: { data: ChatAssessment }) {
         })}
       </div>}
     </figcaption>
+    <p className="mt-2 text-slate-600">{data.method ?? "ผลชุดนี้ยังไม่ระบุรายละเอียดระดับสาร รุ่นโมเดล และวิธีรวมผลสูตร"}</p>
     {view === 'table' || !hasScore ? <table aria-label="ผลคัดกรองรายด้าน" className="mt-3 w-full table-fixed text-left">
       <thead className="border-b border-slate-200 text-[11px] text-slate-500">
         <tr><th className="w-[34%] pb-1 font-medium">ด้านที่ประเมิน</th><th className="w-[22%] pb-1 text-right font-medium">คะแนน /100</th><th className="pb-1 pl-2 font-medium">ข้อสังเกต</th></tr>

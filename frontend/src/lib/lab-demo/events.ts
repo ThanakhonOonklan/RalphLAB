@@ -46,6 +46,7 @@ export type LabEvent =
       to: AgentRole;
       title: string;
       sourceMessageId: string;
+      stage?: string;
       jobTitle?: string;
       attempt: number;
     })
@@ -92,6 +93,7 @@ export type Handoff = {
   to: AgentRole;
   title: string;
   sourceMessageId: string;
+  stage?: string;
   status: HandoffStatus;
   /** Highest attempt seen so far (1 = first try). */
   attempts: number;
@@ -134,7 +136,7 @@ export type Job = {
 export type ChatMessage =
   | { kind: "user"; messageId: string; threadId: string; to: AgentRole; text: string; sequence: number; jobId?: string }
   | { kind: "agent"; messageId: string; threadId: string; from: AgentRole; text: string; sequence: number; jobId?: string; taskId?: string; inReplyTo?: string; activity?: string; assessment?: ChatAssessment }
-  | { kind: "group-invite"; messageId: string; threadId: string; from: "researcher"; jobId: string; text: string; sequence: number }
+  | { kind: "group-invite"; messageId: string; threadId: string; from: AgentRole; jobId: string; text: string; sequence: number }
   /** The sender's "A → B · title · D01" line. Its status is read from `handoffs[handoffId]`. */
   | { kind: "handoff"; messageId: string; threadId: string; handoffId: string; sequence: number }
   | { kind: "acceptance"; messageId: string; threadId: string; handoffId: string; from: AgentRole; text: string; sequence: number }
@@ -240,6 +242,7 @@ function applyEvent(state: LabDemoState, event: LabEvent): LabDemoState {
         to: event.to,
         title: event.title,
         sourceMessageId: event.sourceMessageId,
+        stage: event.stage,
         status: "sending",
         attempts: event.attempt,
       };
@@ -333,9 +336,9 @@ function applyEvent(state: LabDemoState, event: LabEvent): LabDemoState {
     case "job.group_requested": {
       const job = state.jobs[event.jobId];
       const task = state.tasks[event.taskId];
-      if (!job || job.invitation || job.promoted || task?.jobId !== job.jobId || task.owner !== "researcher") return state;
+      if (!job || job.invitation || job.promoted || task?.jobId !== job.jobId || (task.owner !== "researcher" && task.owner !== "formulator")) return state;
       return { ...state, jobs: { ...state.jobs, [job.jobId]: { ...job, invitation: { threadId: event.threadId, taskId: task.taskId, status: "pending" } } },
-        messages: [...state.messages, { kind: "group-invite", from: "researcher", jobId: job.jobId, threadId: event.threadId,
+        messages: [...state.messages, { kind: "group-invite", from: task.owner, jobId: job.jobId, threadId: event.threadId,
           messageId: event.messageId, sequence: event.sequence, text: `ต้องการสร้างกลุ่ม «${job.title}» เพื่อคุยงานนี้ด้วยกันไหม?` }] };
     }
     case "job.group_declined": {

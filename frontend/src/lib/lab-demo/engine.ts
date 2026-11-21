@@ -158,27 +158,23 @@ export function createMockTransport({ faults = [], latencyMs = 0 }: { faults?: F
 
 // ---------------------------------------------------------------- engine
 
-export const ROLE_EN: Record<AgentRole, string> = {
-  director: "Lab Director",
-  researcher: "Researcher",
-  formulator: "Formulation Scientist",
-  analyst: "Analyst",
-  evaluator: "Evaluator",
-};
+export { ROLE_EN } from './roles.ts';
+import { ROLE_EN, ROLE_SCOPE } from './roles.ts';
+import { BRIEF, DECISION, HANDOFFS, RESULTS } from './study-example.ts';
 
 export type SubmitResult = { intent: Intent; handoffId?: string; taskId?: string; jobId?: string };
 
 /** One observable step of an agent's task. `handoff` steps finish when the recipient accepts. */
-export type WorkStep = { id: string; label: string; waitFor?: string; handoff?: { to: AgentRole; title: string } };
+export type WorkStep = { id: string; label: string; waitFor?: string; handoff?: { to: AgentRole; title: string; stage?: string } };
 export type WorkPlan = { steps: WorkStep[]; summary: string; assessment?: ChatAssessment };
 /** What an agent does once it has accepted a handoff (scripted for the demo, live agents later). */
-export type Playbook = (handoff: { from: AgentRole; to: AgentRole; title: string }) => WorkPlan | null;
+export type Playbook = (handoff: { from: AgentRole; to: AgentRole; title: string; stage?: string }) => WorkPlan | null;
 
 /** Example outputs for the offline command-delivery rehearsal. No assay or QSAR is run here. */
 const ROLE_WORK: Record<AgentRole, WorkPlan> = {
   director: {
     steps: [{ id: "brief", label: "บันทึกโจทย์ที่ได้รับ" }, { id: "criteria", label: "ระบุเกณฑ์คัดกรองสี่ด้าน" }],
-    summary: "บันทึกโจทย์และเกณฑ์ของงานนี้แล้ว · เดโม",
+    summary: "บันทึกเกณฑ์ งบ เงื่อนไขขออนุมัติ และเกณฑ์หยุดในใบงานเดโม",
   },
   researcher: {
     steps: [{ id: "source", label: "เปิดบันทึกตัวอย่าง E01" }, { id: "gaps", label: "ทบทวนช่องว่างของหลักฐาน" }],
@@ -186,7 +182,7 @@ const ROLE_WORK: Record<AgentRole, WorkPlan> = {
   },
   formulator: {
     steps: [{ id: "recipe", label: "อ่านสูตรตัวอย่าง V1" }, { id: "total", label: "ตรวจสัดส่วนรวมของตัวอย่าง" }],
-    summary: "ตัวอย่าง V1 สำหรับซ้อมส่งงาน · ส่วน A 90% และส่วน B 10% รวม 100%",
+    summary: "ตัวอย่าง V1 · น้ำ 85% สาร A 5% เบส B 10% รวม 100%",
   },
   analyst: {
     steps: [
@@ -195,27 +191,32 @@ const ROLE_WORK: Record<AgentRole, WorkPlan> = {
       { id: "sensitization", label: "ตรวจช่องข้อมูลการแพ้สัมผัส" },
       { id: "acute", label: "ตรวจขอบเขตข้อมูลพิษเฉียบพลัน" },
     ],
-    summary: "ตัวอย่าง V1 มีผลให้เทียบสองด้าน ควรทบทวนผลด้านตาก่อน ส่วนการแพ้สัมผัสและพิษเฉียบพลันยังสรุปไม่ได้",
+    summary: "ผลผิว V1 สูงกว่าเกณฑ์จำลอง ต้องตรวจหลักฐานด้านเดียวกันก่อนปรับสูตร ส่วนการแพ้สัมผัสและพิษเฉียบพลันยังสรุปไม่ได้",
     assessment: demoAssessment,
   },
   evaluator: {
-    steps: [{ id: "coverage", label: "เทียบข้อมูลสี่ด้านกับโจทย์" }, { id: "decision", label: "บันทึกข้อดีและข้อจำกัด" }],
-    summary: "สรุปเดโม V1 · ข้อดี: มีผลคัดกรองผิวให้เทียบ · ข้อจำกัด: ข้อมูลการแพ้สัมผัสและพิษเฉียบพลันยังสรุปไม่ได้ จึงยังเลือกสูตรที่ดีที่สุดไม่ได้",
+    steps: [{ id: "domain", label: "ตรวจปัญหา domain ที่เกิดซ้ำ" }, { id: "validation", label: "ตรวจคลาส สารซ้ำ และชุดกันไว้" }],
+    summary: "รายงาน M01 · ต้องเทียบ candidate กับรุ่นใช้งานก่อนขออนุมัติแยก",
   },
 };
 
-const NEXT_ASSIGNMENT: Partial<Record<AgentRole, { to: AgentRole; title: string }>> = {
-  director: { to: "researcher", title: "ทบทวนหลักฐานเกี่ยวกับโจทย์นี้" },
-  researcher: { to: "formulator", title: "เตรียมสูตรตัวอย่าง V1 จากบันทึก E01" },
-  formulator: { to: "analyst", title: "อ่านผลคัดกรองจำลองสี่ด้านของ V1" },
-  analyst: { to: "evaluator", title: "ทบทวนข้อดีและข้อจำกัดของ V1" },
-};
-
-export const DEMO_PLAYBOOK: Playbook = ({ to }) => {
+export const DEMO_PLAYBOOK: Playbook = ({ to, stage }) => {
+  if (stage === "decision") return {
+    steps: [{ id: "compare", label: "เทียบผล V1 กับ V2-A และตรวจเกณฑ์หยุด" }],
+    summary: DECISION,
+  };
+  const previous = stage ? HANDOFFS.findIndex(row => row.id === stage && row.to === to) : -1;
+  const next = HANDOFFS[previous + 1];
   const plan = ROLE_WORK[to];
-  const assignment = NEXT_ASSIGNMENT[to];
-  if (!assignment) return plan;
-  return { ...plan, steps: [...plan.steps, { id: "assign", label: `ส่งงานให้ ${ROLE_EN[assignment.to]}`, handoff: assignment }] };
+  if (!next || next.from !== to) return plan;
+  const work = to === "formulator"
+    ? [{ id: "recipe", label: next.note }, { id: "total", label: "ตรวจสัดส่วนรวมและสารที่ล็อก" }]
+    : plan.steps;
+  return {
+    steps: [...work, { id: "assign", label: next.title, handoff: { to: next.to, title: next.title, stage: next.id } }],
+    summary: next.from === "director" ? BRIEF : next.note,
+    assessment: next.releasesResults && next.version ? RESULTS[next.version] : undefined,
+  };
 };
 
 export function createLabDemo({
@@ -323,7 +324,7 @@ export function createLabDemo({
         completeIfDone(parent.taskId);
       }
       // The recipient starts its own work; the sender does not wait for it.
-      if (handoff.from === "director" && receipt.by === "researcher" && !job.invitation && !job.promoted) {
+      if (handoff.stage !== "specialist" && handoff.from === "director" && (receipt.by === "formulator" || receipt.by === "researcher") && !job.invitation && !job.promoted) {
         store.emit(scope, { type: "job.group_requested", jobId: job.jobId, taskId: receipt.taskId,
           messageId: nextMessageId(), experimentId, threadId: recipientThread });
       } else startRecipientWork(handoff);
@@ -336,7 +337,7 @@ export function createLabDemo({
   }
 
   function startRecipientWork(handoff: Handoff) {
-    const plan = playbook?.(handoff);
+    const plan = handoff.stage === "specialist" ? ROLE_WORK[handoff.to] : playbook?.(handoff);
     if (plan) track(runWork(handoff.taskId, plan));
   }
 
@@ -402,17 +403,18 @@ export function createLabDemo({
     completeIfDone(taskId);
   }
 
-  function startChildHandoff(parentTaskId: string, next: { to: AgentRole; title: string }) {
+  function startChildHandoff(parentTaskId: string, next: { to: AgentRole; title: string; stage?: string }) {
     const state = store.get(scope);
     const parent = state.tasks[parentTaskId];
     const job = state.jobs[parent.jobId];
-    const handoffId = `${parent.jobId}:handoff:${parent.owner}->${next.to}`;
+    const handoffId = `${parent.jobId}:handoff:${parent.owner}->${next.to}${next.stage ? ":" + next.stage : ""}`;
     if (state.handoffs[handoffId]) return handoffId;
     store.emit(scope, {
       type: "handoff.sent",
       jobId: parent.jobId,
       handoffId,
-      taskId: `${parent.jobId}:task:${next.to}`,
+      taskId: `${parent.jobId}:task:${next.to}${next.stage ? ":" + next.stage : ""}`,
+      stage: next.stage,
       from: parent.owner,
       to: next.to,
       title: next.title,
@@ -448,10 +450,15 @@ export function createLabDemo({
     const userMessageId = nextMessageId();
     store.emit(scope, { type: "message.user", messageId: userMessageId, to: agent, text, experimentId, threadId });
 
+    if (/คุณเป็นใคร|หน้าที่ของคุณ|ทำหน้าที่อะไร|who are you|your role/i.test(text)) {
+      store.emit(scope, { type: "message.agent", messageId: nextMessageId(), from: agent, inReplyTo: userMessageId,
+        text: ROLE_EN[agent] + " · " + ROLE_SCOPE[agent], experimentId, threadId });
+      return { intent: { kind: "read" } };
+    }
     const intent = classifyIntent(text);
-    if (agent === "researcher") {
+    {
       const invitations = Object.values(store.get(scope).jobs).filter(job =>
-        job.invitation?.status === "pending" && job.invitation.threadId === threadId);
+        job.invitation?.status === "pending" && job.invitation.threadId === threadId && store.get(scope).tasks[job.invitation.taskId]?.owner === agent);
       const answer = text.trim().replace(/\s*(?:ครับ|ค่ะ|คะ)[.!]?$/u, "").trim();
       const accept = /^(?:สร้างกลุ่ม|ตกลง|ยืนยัน|ได้เลย|yes)$/i.test(answer);
       if (invitations.length === 1 && (accept || /^(?:คุยแยกต่อ|ไม่สร้างกลุ่ม|ไม่สร้าง|ไม่ต้อง|no)$/i.test(answer))) {
@@ -490,7 +497,7 @@ export function createLabDemo({
       messageId: nextMessageId(),
       from: agent,
       inReplyTo: userMessageId,
-      text: `งานนี้ต้องใช้หลายบทบาท จะส่งให้ ${ROLE_EN[owner]} เปิดโจทย์`,
+      text: intent.multiRole ? `งานนี้ต้องใช้หลายบทบาท จะส่งให้ ${ROLE_EN[owner]} เปิดโจทย์` : `ส่งให้ ${ROLE_EN[owner]} ตรวจงานนี้`,
       experimentId,
       threadId,
     });
@@ -502,7 +509,8 @@ export function createLabDemo({
       taskId,
       from: agent,
       to: owner,
-      title: `ขอเปิดโจทย์ · ${intent.title}`,
+      title: intent.multiRole ? `ขอเปิดโจทย์ · ${intent.title}` : intent.title,
+      stage: intent.multiRole ? undefined : "specialist",
       sourceMessageId: userMessageId,
       attempt: 1,
       experimentId,

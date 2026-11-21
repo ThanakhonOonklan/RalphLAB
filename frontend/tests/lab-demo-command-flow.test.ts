@@ -4,7 +4,8 @@ import { createDemoStore, createLabDemo, createMockTransport, DEMO_PLAYBOOK, typ
 import { counts, type AgentRole } from "../src/lib/lab-demo/events.ts";
 
 const roles: AgentRole[] = ["director", "researcher", "formulator", "analyst", "evaluator"];
-const brief = "ทำสูตรลดสิวให้หน่อย";
+const brief = "เปิดโครงการลดข้อกังวลด้านการระคายเคืองของสูตรทำความสะอาด";
+const orderedTasks = ["director", "formulator", "analyst", "researcher", "formulator", "analyst", "evaluator", "director"];
 
 function rehearsal(faults: Fault[] = []) {
   return createLabDemo({
@@ -14,7 +15,7 @@ function rehearsal(faults: Fault[] = []) {
 }
 
 for (const role of roles) {
-  test(`commission from ${role} reaches the Evaluator once despite lost acknowledgements`, async () => {
+  test(`commission from ${role} returns to the Study Lead after reviewing two revisions despite lost acknowledgements`, async () => {
     const demo = rehearsal([{ attempt: 1, kind: "ack-lost" }]);
     const result = await demo.submit(role, brief);
     await demo.idle();
@@ -22,20 +23,21 @@ for (const role of roles) {
     assert.equal(invitation?.status, "pending");
     assert.equal(counts(demo.state()).groupThreads, 0);
     assert.equal(Object.values(demo.state().tasks).length, 2);
-    assert.ok(demo.state().messages.some(m => m.kind === "group-invite" && m.threadId === invitation.threadId && m.text.includes("สูตรลดสิว")));
+    assert.ok(demo.state().messages.some(m => m.kind === "group-invite" && m.threadId === invitation.threadId && m.from === "formulator" && m.text.includes("สูตรทำความสะอาด")));
     demo.decideGroup(result.jobId!, true);
     demo.decideGroup(result.jobId!, true);
     await demo.idle();
     const state = demo.state();
     const tasks = Object.values(state.tasks);
-    assert.equal(tasks.length, 5);
-    assert.deepEqual(tasks.map(task => task.owner), roles);
+    assert.equal(tasks.length, orderedTasks.length);
+    assert.deepEqual(tasks.map(task => task.owner), orderedTasks);
     assert.ok(tasks.every(task => task.jobId === result.jobId && task.status === "completed"));
-    assert.match(tasks[4].summary!, /ยังเลือกสูตรที่ดีที่สุดไม่ได้/);
+    assert.match(tasks.at(-1)!.summary!, /พักเพื่อทดสอบเพิ่มเติม/);
+    assert.deepEqual(state.messages.flatMap(m => m.kind === "agent" && m.assessment ? [m.assessment.formulaName] : []), ["V1", "V2-A"]);
     const job = state.jobs[result.jobId!];
     assert.equal(new Set(job.assignees).size, 5);
     assert.equal(counts(state).pointers, 1);
-    assert.equal(counts(state).handoffs, role === "director" ? 4 : 5);
+    assert.equal(counts(state).handoffs, role === "director" ? 7 : 8);
     for (const delivery of Object.values(state.handoffs)) {
       assert.notEqual(delivery.from, delivery.to);
       assert.equal(delivery.status, "accepted");
@@ -82,7 +84,7 @@ test("assessment replies only graph results delivered for the requested thread a
 });
 
 test("a failed intermediate delivery resumes from the same handoff to the final review", async () => {
-  const handoffId = "qa:D01:job:qa:D01:msg-1:handoff:researcher->formulator";
+  const handoffId = "qa:D01:job:qa:D01:msg-1:handoff:formulator->analyst:sample-v1";
   const demo = rehearsal([1, 2].map(attempt => ({ attempt, kind: "unreachable", handoffId })));
   const { jobId } = await demo.submit("director", brief);
   await demo.idle();
@@ -93,7 +95,7 @@ test("a failed intermediate delivery resumes from the same handoff to the final 
   await demo.retry(handoffId);
   await demo.idle();
   assert.equal(demo.state().handoffs[handoffId].attempts, 3);
-  assert.deepEqual(Object.values(demo.state().tasks).map(task => task.status), roles.map(() => "completed"));
+  assert.deepEqual(Object.values(demo.state().tasks).map(task => task.status), orderedTasks.map(() => "completed"));
 });
 
 test("declining keeps the entire job private and delivers the summary to each owner", async () => {
@@ -110,5 +112,22 @@ test("declining keeps the entire job private and delivers the summary to each ow
     assert.ok(task.workThreadId?.includes(":private:" + task.owner));
     assert.equal(state.messages.filter(m => m.kind === "agent" && m.text === task.summary && m.threadId === task.workThreadId).length, 1);
   }
-  assert.equal(Object.keys(state.tasks).length, 5);
+  assert.equal(Object.keys(state.tasks).length, orderedTasks.length);
+});
+
+test("route an evidence mismatch, a single domain issue and a recurring model issue to their specialists", async () => {
+  for (const [request, owner] of [
+    ["ตรวจหลักฐานไม่ตรง endpoint", "researcher"],
+    ["ตรวจผลนอก domain ของสาร B", "analyst"],
+    ["ตรวจโมเดลนอก domain ซ้ำหลายเคส", "evaluator"],
+  ]) {
+    const demo = rehearsal();
+    const {jobId} = await demo.submit("director", request);
+    await demo.idle();
+    const [task] = Object.values(demo.state().tasks);
+    assert.equal(task.owner, owner);
+    assert.equal(task.status, "completed");
+    assert.equal(demo.state().jobs[jobId!].invitation, undefined);
+    assert.equal(counts(demo.state()).handoffs, 1);
+  }
 });

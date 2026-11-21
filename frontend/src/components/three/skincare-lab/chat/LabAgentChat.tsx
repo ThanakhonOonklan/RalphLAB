@@ -21,13 +21,7 @@ import MessageMeta from './MessageMeta'
 import ChatActivity, { elapsedLabel } from './ChatActivity'
 import type { AgentDemo } from './useAgentDemo'
 
-const AGENTS: Record<Role, { english: string; scope: string }> = {
-  director: { english: 'Lab Director', scope: 'กำหนดโจทย์ ข้อจำกัด และขั้นตอนถัดไป' },
-  researcher: { english: 'Researcher', scope: 'อธิบายส่วนผสมและช่องว่างของหลักฐาน' },
-  formulator: { english: 'Formulation Scientist', scope: 'อ่านองค์ประกอบสูตรและเสนอแนวทางปรับเพื่อทดสอบ' },
-  analyst: { english: 'Analyst', scope: 'อธิบายผลคัดกรองราย Endpoint และข้อจำกัดของแบบจำลอง' },
-  evaluator: { english: 'Evaluator', scope: 'ทบทวนข้อจำกัดของผลและเสนอขั้นตอนตรวจสอบเพิ่มเติม' },
-}
+import { ROLE_EN, ROLE_SCOPE } from '@/lib/lab-demo/roles'
 
 const shortDate = new Intl.DateTimeFormat('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 const iconButton = 'grid size-8 shrink-0 place-items-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600 disabled:opacity-40 [&>svg]:size-4'
@@ -110,7 +104,7 @@ export default function LabAgentChat({ agent, formula, chat, onSelectAgent, onCl
   const followScroll = useRef(true)
   const job = screen.kind === 'group' ? agentDemo?.state.jobs[screen.jobId] : undefined
   const [highlightId, setHighlightId] = useState<string | null>(screen.kind === 'group' ? screen.highlightId ?? null : null)
-  const role = AGENTS[agent]
+  const role = { english: ROLE_EN[agent], scope: ROLE_SCOPE[agent] }
   const name = role.english
   const workflowProject = agentDemo?.state.projectId
   const experimentId = agentDemo?.experimentId
@@ -263,13 +257,13 @@ export default function LabAgentChat({ agent, formula, chat, onSelectAgent, onCl
                 </button>
               </PopoverTrigger>
               <PopoverContent aria-label="เลือก Agent" align="start" sideOffset={8} className="lab-chat-scroll z-[85] max-h-[var(--radix-popover-content-available-height)] w-56 max-w-[calc(100vw-16px)] overflow-y-auto rounded-xl border-slate-200 bg-white p-1.5 text-slate-900 shadow-lg data-[state=closed]:animate-none motion-reduce:animate-none">
-                {(Object.keys(AGENTS) as Role[]).map((option) => (
+                {(Object.keys(ROLE_EN) as Role[]).map((option) => (
                   <button key={option} type="button" onClick={() => {
                     setOpenMenu(null)
                     onSelectAgent(option)
                   }} aria-current={option === agent ? 'true' : undefined} className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-teal-600 aria-[current=true]:bg-teal-50">
                     <Portrait agent={option} />
-                    <span className="flex-1">{AGENTS[option].english}</span>
+                    <span className="flex-1">{ROLE_EN[option]}</span>
                     {option === agent && <Check aria-hidden="true" className="size-4 shrink-0 text-teal-700" />}
                   </button>
                 ))}

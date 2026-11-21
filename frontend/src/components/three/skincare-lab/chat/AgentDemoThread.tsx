@@ -173,7 +173,7 @@ export default function AgentDemoThread({ demo, threadId, job, highlightId, onOp
     if (message.kind === 'job-intro') {
       return (
         <article key={message.messageId} {...common} className={`${common.className} border-y border-slate-200 py-2 text-xs text-slate-600`}>
-          <p className="font-semibold text-slate-800">Researcher เปิดกลุ่มตามที่คุณยืนยัน</p>
+          <p className="font-semibold text-slate-800">เปิดกลุ่มตามที่คุณยืนยัน</p>
           <p className="mt-0.5">ผู้รับผิดชอบ: {message.assignees.map((role) => ROLE_EN[role]).join(', ')}</p>
         </article>
       )
@@ -181,7 +181,7 @@ export default function AgentDemoThread({ demo, threadId, job, highlightId, onOp
     if (message.kind === 'group-invite') {
       const invitation = demo.state.jobs[message.jobId].invitation
       return <article key={message.messageId} {...common}>
-        <SenderMessage role="researcher" first={showSpeaker}>
+        <SenderMessage role={message.from} first={showSpeaker}>
           <p className="text-sm leading-7">{message.text}</p>
           {invitation?.status === 'pending' ? <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
             <button type="button" className="rounded-lg bg-teal-700 px-3 py-2 text-white hover:bg-teal-800" onClick={() => { demo.decideGroup(message.jobId, true); onOpenGroup(message.jobId) }}>สร้างกลุ่ม</button>

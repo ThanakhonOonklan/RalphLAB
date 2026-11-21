@@ -79,9 +79,9 @@ test("two promoted tasks in one project retain separate titles, previews, member
   assert.equal(groups.length, 2);
   assert.equal(groups[0].jobId, second.jobId);
   assert.equal(groups[0].title, "ครีมสำหรับผิวแห้ง");
-  assert.deepEqual(groups[0].agents, ["evaluator", "director", "researcher", "formulator", "analyst"]);
+  assert.deepEqual(groups[0].agents, ["evaluator", "director", "formulator", "analyst", "researcher"]);
   assert.equal(groups[1].title, "คลีนเซอร์สำหรับผิวเป็นสิวง่าย");
-  assert.deepEqual(groups[1].agents, ["analyst", "director", "researcher", "formulator", "evaluator"]);
+  assert.deepEqual(groups[1].agents, ["analyst", "director", "formulator", "researcher", "evaluator"]);
   const before = engine.state();
   for (const row of groups) {
     const last = before.messages.filter((m) => m.threadId === before.jobs[row.jobId].threadId && messageJobId(before, m) === row.jobId).at(-1);
