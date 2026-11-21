@@ -1,0 +1,94 @@
+# ============ Node / Frontend ============
+node_modules/
+.next/
+.next-dev/
+.next-corrupt-*/
+out/
+build/
+dist/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ============ Python / Backend / Scientific ============
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.tox/
+
+# ============ Environment ============
+.env
+.env.local
+.env.*.local
+!.env.example
+.vercel/
+
+# ============ Data (large files) ============
+data/raw/*
+!data/raw/.gitkeep
+!data/raw/README.md
+!data/raw/dataset_manifest.example.json
+!data/raw/dataset_manifest.json
+!data/raw/skin_dryness/
+!data/raw/skin_dryness/**
+data/processed/*
+!data/processed/.gitkeep
+data/staging/
+*.pkl
+!scientific/models/*.pkl
+!scientific/models/candidate_v3/skin_dryness_model.pkl
+*.joblib
+*.h5
+models/*.bin
+*.tsbuildinfo
+
+# Generated model-v2 audit/candidate artifacts may contain derived dataset
+# identities or local benchmark output. Keep them local unless a sanitized
+# report is intentionally reviewed and committed later.
+scientific/models/candidate_v2/
+scientific/models/training_manifests/
+scientific/models/training_integrity_report.json
+
+# ============ IDE ============
+.vscode/
+!.vscode/settings.json.example
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ============ Docker ============
+*.dockerignore
+!.dockerignore
+!backend/.dockerignore
+!scientific/.dockerignore
+
+# ============ Database ============
+*.sqlite3
+*.db
+postgres-data/
+redis-data/
+
+# ============ Misc ============
+*.tmp
+*.bak
+.cache/
+tmp/
+
+# ============ 3D source files (not shipped) ============
+frontend/public/Blender/

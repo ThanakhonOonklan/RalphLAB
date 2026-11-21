@@ -1,0 +1,56 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import Image from 'next/image'
+import { ArrowRight } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+
+export default function Navbar() {
+  const [scrolled, setScrolled] = useState(false)
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 20)
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  return (
+    <nav
+      className={cn(
+        'fixed top-0 left-0 right-0 z-50 transition-all duration-300',
+        scrolled ? 'bg-transparent backdrop-blur-md' : 'bg-transparent'
+      )}
+    >
+      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:h-16 sm:px-6">
+        {/* Logo */}
+        <a href="#hero" className="flex items-center gap-2.5 group">
+          <Image
+            unoptimized
+            src="/icons/logo-192.webp"
+            alt=""
+            width={36}
+            height={36}
+            priority
+            className="size-8 shrink-0 object-contain sm:size-9"
+          />
+          <span className="font-display text-base font-semibold tracking-tight text-foreground sm:text-lg">
+            RalphGuard
+          </span>
+        </a>
+
+        {/* Authentication entry point */}
+        <Button
+          asChild
+          variant="outline"
+          className="h-9 rounded-full border-brand/40 bg-transparent px-3 text-xs text-foreground hover:border-brand/70 hover:bg-brand/10 sm:h-10 sm:px-4 sm:text-sm"
+        >
+          <a href="/login">
+            เข้าสู่ระบบ
+            <ArrowRight className="text-brand" />
+          </a>
+        </Button>
+      </div>
+    </nav>
+  )
+}

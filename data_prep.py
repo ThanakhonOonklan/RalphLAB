@@ -1,0 +1,315 @@
+"""
+RalphGuard — Data Preparation & QSAR Training (Ensemble v2)
+===========================================================
+รัน: python data_prep.py   (แนะนำรันใน Docker worker เพื่อให้เวอร์ชัน lib ตรงกับ runtime)
+
+วิธีการ (ดู docs/MODEL_IMPROVEMENT.md):
+  1. โหลด 4 dataset, canonicalize SMILES ด้วย RDKit, ลบ duplicate
+  2. Featurize แบบเลือกต่อ endpoint (featurizer.py):
+        skin/eye -> MACCS + descriptors | sens -> Morgan | acute -> Morgan+MACCS+descriptors
+  3. โมเดล = Soft-Voting Ensemble (RandomForest + ExtraTrees + LogReg + HistGB, ทุกตัว balanced)
+  4. เลือก operating threshold ต่อ endpoint ด้วย Youden's J จาก 5-fold out-of-fold
+  5. รายงาน metric out-of-fold: accuracy, balanced acc, sensitivity, specificity, ROC-AUC, MCC
+  6. เก็บ bundle: ensemble members + feature_mode + threshold + Morgan train_fps (สำหรับ AD)
+
+หมายเหตุความซื่อสัตย์: ค่าใน validation_report เป็น out-of-fold (5-fold). ตัวเลข nested-CV
+ที่เข้มกว่า (เลือก threshold โดยไม่ leak) อยู่ใน docs/MODEL_IMPROVEMENT.md
+"""
+import os, sys, json, pickle, warnings
+from pathlib import Path
+warnings.filterwarnings("ignore")
+
+import numpy as np
+import pandas as pd
+from rdkit import Chem, RDLogger
+RDLogger.DisableLog("rdApp.*")
+from sklearn.ensemble import (RandomForestClassifier, ExtraTreesClassifier,
+                              HistGradientBoostingClassifier)
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import StratifiedKFold
+from sklearn.metrics import (accuracy_score, balanced_accuracy_score, recall_score,
+                             roc_auc_score, confusion_matrix, matthews_corrcoef)
+
+BASE = Path(__file__).parent
+DATA = BASE / "data" / "raw"
+OUT = BASE / "scientific" / "models"
+OUT.mkdir(parents=True, exist_ok=True)
+sys.path.insert(0, str(BASE / "scientific"))
+from featurizer import featurize_mol, morgan_bits  # noqa: E402
+from endpoints import ENDPOINT_CONFIG  # noqa: E402
+
+DATASETS = {
+    "skin":  DATA / "skin_irritation.csv",
+    "eye":   DATA / "eye_irritation.csv",
+    "sens":  DATA / "skin_sensitization.csv",
+    "acute": DATA / "acute_oral_toxicity.csv",
+}
+# Skin dryness intentionally stays out of the legacy four-endpoint trainer.
+# Its feature mode must first be selected by the notebook benchmark, after
+# which scripts/skin_dryness_workflow.py trains candidate_v3.  Merely having a
+# header-only curated CSV must never make the legacy trainer treat it as ready.
+CURATED_PUBCHEM_DATASETS = {
+    endpoint: BASE / "data" / "curated" / f"pubchem_verified_{endpoint}.csv"
+    for endpoint in DATASETS
+}
+ENDPOINT_NAMES = {
+    endpoint: str(config["label_en"])
+    for endpoint, config in ENDPOINT_CONFIG.items()
+}
+# feature mode per endpoint (from nested-CV study)
+FEATURE_MODE = {"skin": "maccs_descr", "eye": "maccs_descr",
+                "sens": "morgan", "acute": "morgan_maccs_descr"}
+MEMBER_NAMES = ["RandomForest", "ExtraTrees", "LogReg", "HistGB"]
+TRAINING_PROFILE = "standard"
+
+
+def configure_training_profile(profile):
+    """Select an explicit resource profile without changing model semantics."""
+    global TRAINING_PROFILE
+    if profile not in {"standard", "large"}:
+        raise ValueError(f"unsupported training profile: {profile}")
+    TRAINING_PROFILE = profile
+
+
+def build_members():
+    large = TRAINING_PROFILE == "large"
+    return [
+        RandomForestClassifier(
+            160 if large else 250,
+            random_state=42,
+            n_jobs=-1,
+            class_weight=None,
+            min_samples_leaf=2 if large else 1,
+        ),
+        ExtraTreesClassifier(
+            200 if large else 300,
+            random_state=42,
+            n_jobs=-1,
+            class_weight=None,
+            min_samples_leaf=2 if large else 1,
+        ),
+        make_pipeline(
+            StandardScaler(with_mean=not large),
+            LogisticRegression(
+                max_iter=1500 if large else 2000,
+                class_weight=None,
+                solver="saga" if large else "lbfgs",
+                tol=1e-3 if large else 1e-4,
+                random_state=42,
+                n_jobs=-1,
+            ),
+        ),
+        HistGradientBoostingClassifier(random_state=42),
+    ]
+
+
+def effective_sample_weights(y, evidence_weight=None):
+    """Combine evidence quality with exact binary-class balancing.
+
+    Balancing raw row counts and then multiplying by evidence weights makes a
+    class dominated by weight-0.25 PubChem rows carry only one quarter of the
+    other class's total optimization weight.  Instead, balance the *sum of
+    evidence weights* in each class.  This preserves the within-class evidence
+    hierarchy while giving each endpoint class equal total influence.
+    """
+    labels = np.asarray(y, dtype=int)
+    if evidence_weight is None:
+        quality = np.ones(len(labels), dtype=float)
+    else:
+        quality = np.asarray(evidence_weight, dtype=float)
+        if quality.shape != labels.shape:
+            raise ValueError("evidence_weight must have the same shape as y")
+        if not np.all(np.isfinite(quality)) or np.any(quality <= 0):
+            raise ValueError("evidence_weight must contain finite positive values")
+    classes = np.unique(labels)
+    if set(classes).difference({0, 1}) or len(classes) != 2:
+        raise ValueError("binary class balancing requires both labels 0 and 1")
+    target_total = float(quality.sum()) / 2.0
+    effective = quality.copy()
+    for label in (0, 1):
+        mask = labels == label
+        class_total = float(quality[mask].sum())
+        if class_total <= 0:
+            raise ValueError(f"class {label} has no positive evidence weight")
+        effective[mask] *= target_total / class_total
+    # Keep the mean near one so regularisation and tree weight magnitudes remain
+    # comparable across endpoints and folds.
+    effective *= len(effective) / float(effective.sum())
+    return effective
+
+
+def fit_members(X, y, sample_weight=None):
+    effective_weight = effective_sample_weights(y, sample_weight)
+    members = build_members()
+    for name, m in zip(MEMBER_NAMES, members):
+        if name == "HistGB":
+            m.fit(X, y, sample_weight=effective_weight)
+        elif name == "LogReg":
+            m.fit(X, y, logisticregression__sample_weight=effective_weight)
+        else:
+            m.fit(X, y, sample_weight=effective_weight)
+    return members
+
+
+def ensemble_proba(members, X):
+    """mean positive-class probability + std (member disagreement = uncertainty)."""
+    P = np.column_stack([m.predict_proba(X)[:, 1] for m in members])
+    return P.mean(axis=1), P.std(axis=1)
+
+
+def youden_threshold(y, p):
+    best_t, best_j = 0.5, -1.0
+    for t in np.linspace(0.05, 0.95, 19):
+        pred = (p >= t).astype(int)
+        tn, fp, fn, tp = confusion_matrix(y, pred, labels=[0, 1]).ravel()
+        sens = tp / (tp + fn) if tp + fn else 0
+        spec = tn / (tn + fp) if tn + fp else 0
+        j = sens + spec - 1
+        if j > best_j:
+            best_j, best_t = j, t
+    return float(best_t)
+
+
+def load_endpoint(path, mode, supplemental_path=None):
+    df = pd.read_csv(path)
+    df["training_origin"] = "base"
+    df["sample_weight"] = 1.0
+    supplemental_count = 0
+    if supplemental_path and supplemental_path.exists():
+        supplemental = pd.read_csv(supplemental_path)
+        required = {"smiles", "label", "source", "evidence_ids"}
+        missing = required.difference(supplemental.columns)
+        if missing:
+            raise ValueError(
+                f"{supplemental_path.name} is not a reviewed evidence export; missing {sorted(missing)}"
+            )
+        supplemental["training_origin"] = "pubchem_reviewed"
+        if "sample_weight" not in supplemental.columns:
+            supplemental["sample_weight"] = 0.5
+        supplemental["sample_weight"] = pd.to_numeric(
+            supplemental["sample_weight"], errors="coerce"
+        ).fillna(0.5).clip(0.05, 1.0)
+        supplemental_count = len(supplemental)
+        df = pd.concat([df, supplemental], ignore_index=True, sort=False)
+    df["canonical"] = df["smiles"].apply(
+        lambda s: (Chem.MolToSmiles(Chem.MolFromSmiles(str(s)))
+                   if Chem.MolFromSmiles(str(s)) else None))
+    before = len(df)
+    df = df.dropna(subset=["canonical"])
+    # Never resolve contradictory labels by row order.  Conflicting structures
+    # are excluded until their endpoint evidence is reviewed.
+    label_counts = df.groupby("canonical")["label"].nunique()
+    conflicts = set(label_counts[label_counts > 1].index)
+    if conflicts:
+        df = df[~df["canonical"].isin(conflicts)]
+    df = df.drop_duplicates("canonical").reset_index(drop=True)
+    feats, morgans, y = [], [], []
+    for _, r in df.iterrows():
+        mol = Chem.MolFromSmiles(r["canonical"])
+        if mol is None:
+            continue
+        feats.append(featurize_mol(mol, mode))
+        morgans.append(morgan_bits(mol))
+        y.append(int(r["label"]))
+    origins = df["training_origin"].value_counts().to_dict()
+    return (np.vstack(feats).astype(np.float32, copy=False), np.vstack(morgans),
+            np.array(y), df["canonical"].tolist(), before - len(df),
+            supplemental_count, len(conflicts), origins,
+            df["sample_weight"].to_numpy(dtype=float))
+
+
+def evaluate_oof(X, y, sample_weight=None):
+    skf = StratifiedKFold(5, shuffle=True, random_state=42)
+    oof = np.zeros(len(y))
+    for tr, te in skf.split(X, y):
+        fold_weight = sample_weight[tr] if sample_weight is not None else None
+        members = fit_members(X[tr], y[tr], fold_weight)
+        oof[te], _ = ensemble_proba(members, X[te])
+    thr = youden_threshold(y, oof)
+    pred = (oof >= thr).astype(int)
+    tn, fp, fn, tp = confusion_matrix(y, pred, labels=[0, 1]).ravel()
+    metrics = dict(
+        accuracy=round(accuracy_score(y, pred), 3),
+        balanced_accuracy=round(balanced_accuracy_score(y, pred), 3),
+        sensitivity=round(tp / (tp + fn) if tp + fn else 0, 3),
+        specificity=round(tn / (tn + fp) if tn + fp else 0, 3),
+        auc=round(roc_auc_score(y, oof), 3) if len(np.unique(y)) > 1 else None,
+        mcc=round(matthews_corrcoef(y, pred), 3),
+        threshold=round(thr, 3),
+        n_pos=int(y.sum()), n_neg=int((y == 0).sum()),
+    )
+    return metrics, thr
+
+
+def main():
+    print("=" * 60)
+    print("🔬 RalphGuard — QSAR Training (Ensemble v2)")
+    print("=" * 60)
+    missing_raw = [path.name for path in DATASETS.values() if not path.exists()]
+    if missing_raw:
+        raise RuntimeError(
+            "Refusing to overwrite model artifacts because the base raw datasets are missing: "
+            + ", ".join(missing_raw)
+        )
+    all_metrics = {}
+    for ep, path in DATASETS.items():
+        mode = FEATURE_MODE[ep]
+        print(f"\n── {ENDPOINT_NAMES[ep]} ({ep}) | features={mode} ──")
+        X, Xmorgan, y, smiles, dropped, supplemental, conflicts, origins, sample_weight = load_endpoint(
+            path, mode, CURATED_PUBCHEM_DATASETS[ep]
+        )
+        if len(np.unique(y)) < 2:
+            raise ValueError(f"{ep} training data must contain both positive and negative labels")
+        print(f"   compounds={len(y)} (dropped {dropped}) | "
+              f"pos/neg={int(y.sum())}/{int((y==0).sum())} | dim={X.shape[1]}")
+        if supplemental:
+            print(
+                f"   reviewed PubChem rows={supplemental} | conflicts excluded={conflicts} | "
+                f"origins={origins}"
+            )
+
+        metrics, thr = evaluate_oof(X, y, sample_weight)
+        print(f"   OOF: Acc={metrics['accuracy']} BalAcc={metrics['balanced_accuracy']} "
+              f"Sens={metrics['sensitivity']} Spec={metrics['specificity']} "
+              f"AUC={metrics['auc']} MCC={metrics['mcc']} | thr={metrics['threshold']}")
+
+        members = fit_members(X, y, sample_weight)  # final fit on all data
+        bundle = {
+            "format": "ensemble_v2",
+            "members": members,
+            "member_names": MEMBER_NAMES,
+            "feature_mode": mode,
+            "threshold": thr,
+            "train_fps": [m for m in Xmorgan],   # Morgan fps for AD
+            "train_smiles": smiles,
+            "metrics": metrics,
+            "endpoint": ep,
+            "label": ENDPOINT_NAMES[ep],
+            "training_sources": origins,
+            "pubchem_reviewed_rows_loaded": supplemental,
+            "conflicting_structures_excluded": conflicts,
+            "training_sample_weight_summary": {
+                "min": float(sample_weight.min()),
+                "max": float(sample_weight.max()),
+                "mean": float(sample_weight.mean()),
+            },
+        }
+        with open(OUT / f"{ep}_model.pkl", "wb") as f:
+            pickle.dump(bundle, f)
+        print(f"   ✅ saved {ep}_model.pkl")
+        all_metrics[ep] = metrics
+
+    json.dump(all_metrics, open(OUT / "validation_report.json", "w"), indent=2)
+    print("\n" + "=" * 60)
+    print(f"{'Endpoint':<20}{'Acc':>6}{'BalAcc':>8}{'Sens':>6}{'Spec':>6}{'AUC':>7}{'MCC':>7}{'thr':>6}")
+    print("-" * 60)
+    for ep, m in all_metrics.items():
+        print(f"{ENDPOINT_NAMES[ep]:<20}{m['accuracy']:>6}{m['balanced_accuracy']:>8}"
+              f"{m['sensitivity']:>6}{m['specificity']:>6}{str(m['auc']):>7}{m['mcc']:>7}{m['threshold']:>6}")
+    print("\n🎉 Done. Models ready in scientific/models/ (format=ensemble_v2)")
+
+
+if __name__ == "__main__":
+    main()

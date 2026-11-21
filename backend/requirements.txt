@@ -1,0 +1,37 @@
+# FastAPI core
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+pydantic-settings==2.5.2
+
+# Database
+sqlalchemy==2.0.35
+asyncpg==0.29.0
+psycopg2-binary==2.9.9
+alembic==1.13.3
+
+# Redis / Queue
+redis==5.0.8
+
+# Chemistry (for SMILES validation on the API side)
+# NOTE: rdkit 2024.3.5 was yanked from PyPI; 2025.3.x is the current stable line.
+rdkit==2025.3.6
+numpy==2.0.2
+
+# Utilities
+python-multipart==0.0.10
+python-dotenv==1.0.1
+
+# Testing
+pytest==8.3.3
+pytest-asyncio==0.24.0
+httpx==0.27.2
+
+# Neural TTS (free, no API key) for the voice assistant
+edge-tts>=6.1.9
+
+# OCR ingredient-label reader (image processing). Requires the `tesseract-ocr`
+# system package (installed in Dockerfile).
+pytesseract==0.3.13
+Pillow==10.4.0
+rapidfuzz==3.10.1

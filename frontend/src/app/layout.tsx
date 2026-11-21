@@ -1,0 +1,62 @@
+import type { Metadata } from "next";
+import localFont from "next/font/local";
+import { IBM_Plex_Mono, Noto_Sans_Thai } from "next/font/google";
+import { Toaster } from "@/components/ui/sonner";
+import { SessionProvider } from "@/components/auth/SessionProvider";
+import "./globals.css";
+
+// LINE Seed Sans TH — Thai + Latin body text
+const lineSeedTH = localFont({
+  src: [
+    { path: "../../public/fonts/LINESeedSansTH_W_Th.woff", weight: "100", style: "normal" },
+    { path: "../../public/fonts/LINESeedSansTH_W_Rg.woff", weight: "400", style: "normal" },
+    { path: "../../public/fonts/LINESeedSansTH_W_Bd.woff", weight: "700", style: "normal" },
+    { path: "../../public/fonts/LINESeedSansTH_W_He.woff", weight: "800", style: "normal" },
+  ],
+  variable: "--font-sans",
+  display: "swap",
+});
+
+// Noto Sans Thai — fallback for Thai tone marks LINE Seed renders incorrectly
+// Google Fonts serves this with unicode-range U+0E00-U+0E7F so it only
+// activates for Thai characters, leaving Latin to LINE Seed.
+const notoSansThai = Noto_Sans_Thai({
+  subsets: ["thai"],
+  weight: ["400", "700", "800"],
+  variable: "--font-thai",
+  display: "swap",
+})
+
+// IBM Plex Mono — code / mono (LINE Seed has no mono variant)
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-mono",
+  display: "swap",
+});
+
+export const metadata: Metadata = {
+  title: "RalphGuard",
+  description:
+    "In-silico Irritation & Toxicity Risk Screening Platform for cosmetic formulations.",
+  // Favicons come from app/icon.png (32 px) and app/apple-icon.png (180 px).
+  // The full-size logo.png (872 KB) is only for the PDF report.
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html
+      lang="th"
+      className={`${lineSeedTH.variable} ${ibmPlexMono.variable} ${notoSansThai.variable}`}
+    >
+      <body className="antialiased" suppressHydrationWarning>
+        <SessionProvider>{children}</SessionProvider>
+        <Toaster />
+      </body>
+    </html>
+  );
+}

@@ -1,0 +1,108 @@
+"""Assessment schemas — request, queued response, final result."""
+from datetime import datetime
+from enum import Enum
+from typing import List, Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from rdkit import Chem
+
+
+Endpoint = Literal["skin", "eye", "sens", "acute", "skin_dryness"]
+Region = Literal["forearm", "hand", "face", "eye"]
+ConfidenceLevel = Literal["High", "Medium", "Low"]
+
+
+class AssessmentStatus(str, Enum):
+    queued = "queued"
+    running = "running"
+    completed = "completed"
+    failed = "failed"
+
+
+class FormulaItem(BaseModel):
+    smiles: str = Field(..., min_length=1, max_length=1000)
+    name: Optional[str] = Field(None, max_length=300)
+    concentration: float = Field(..., ge=0, le=100, description="Percentage 0-100")
+
+    @field_validator("smiles")
+    @classmethod
+    def smiles_must_be_valid(cls, value: str) -> str:
+        value = value.strip()
+        if Chem.MolFromSmiles(value) is None:
+            raise ValueError("invalid SMILES")
+        return value
+
+
+class CreateAssessmentRequest(BaseModel):
+    formula: List[FormulaItem] = Field(..., min_length=1, max_length=20)
+    region: Region
+    project_id: Optional[int] = None
+
+    @model_validator(mode="after")
+    def validate_formula_total(self):
+        positive = [item for item in self.formula if item.concentration > 0]
+        if not positive:
+            raise ValueError("formula must contain at least one positive concentration")
+        total = sum(item.concentration for item in self.formula)
+        if total > 100.0001:
+            raise ValueError(f"formula concentration total exceeds 100% ({total:.2f}%)")
+        return self
+
+
+class CreateAssessmentResponse(BaseModel):
+    job_id: str
+    status: AssessmentStatus
+
+
+class Confidence(BaseModel):
+    level: ConfidenceLevel
+    reason_th: str
+    score: float
+    in_domain: bool
+    domain_similarity: float
+
+
+class EndpointResult(BaseModel):
+    peak_score: float = Field(..., description="0-100 peak risk score")
+    timecourse: Optional[List[int]] = Field(
+        None,
+        description="Day 1, Day 3, Day 7 scores when an evidence-backed temporal profile exists",
+    )
+    band: Literal["low", "moderate", "high", "severe"]
+    confidence: Confidence
+
+
+class SubstancePrediction(BaseModel):
+    smiles: str
+    canonical_smiles: str
+    name: Optional[str]
+    concentration: float
+    descriptors: dict
+    per_endpoint: dict
+    confidence: Confidence
+
+
+class AssessmentResult(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    job_id: str = Field(..., alias="id")
+    status: AssessmentStatus
+    region: str
+    formula: List[FormulaItem]
+    result: Optional[dict] = None
+    error: Optional[str] = None
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+
+
+class AssessmentSummary(BaseModel):
+    """Lightweight row for history lists (omits the heavy result blob)."""
+    model_config = ConfigDict(from_attributes=True)
+
+    job_id: str = Field(..., alias="id")
+    status: AssessmentStatus
+    region: str
+    project_id: Optional[int] = None
+    n_substances: int = 0
+    created_at: datetime
+    completed_at: Optional[datetime] = None
