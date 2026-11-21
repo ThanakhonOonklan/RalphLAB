@@ -302,6 +302,8 @@ async function httpOnce<T>(path: string, init?: RequestInit, timeoutMs = 12000):
 }
 
 export const api = {
+  assessmentAvailability: (signal?: AbortSignal) =>
+    http<{ enabled: boolean }>("/api/assessments/availability", { signal, cache: "no-store" }),
   validateSmiles: (smiles: string, signal?: AbortSignal) =>
     http<ValidateResult>("/api/substances/validate", {
       method: "POST",

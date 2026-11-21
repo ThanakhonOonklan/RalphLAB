@@ -263,6 +263,14 @@ const clampLeftSidebarWidth = (width: number, viewportWidth = Number.POSITIVE_IN
   );
 
 export default function StudioPage() {
+  const [qsarEnabled, setQsarEnabled] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    api.assessmentAvailability(controller.signal)
+      .then(({ enabled }) => { if (!controller.signal.aborted) setQsarEnabled(enabled); })
+      .catch(() => { /* Keep assessment controls disabled if the API is unavailable. */ });
+    return () => controller.abort();
+  }, []);
   const router = useRouter();
   const workspaceShellRef = useRef<HTMLDivElement>(null);
   const mobileBrushControlRef = useRef<HTMLDivElement>(null);
@@ -1035,6 +1043,10 @@ export default function StudioPage() {
   ) => {
     setError(null);
     const selectedFormula = formulas.find((item) => item.id === formulaId);
+    if (!qsarEnabled) {
+      toast.info("พักการประเมิน QSAR ชั่วคราว");
+      return;
+    }
     const substances = candidate.filter(
       (item) =>
         !isWaterItem(item) &&
@@ -1582,6 +1594,7 @@ export default function StudioPage() {
           if (a.tab === "assess" || a.tab === "nodes") nextMode = a.tab;
           break;
         case "run":
+          if (!qsarEnabled) throw new Error("พักการประเมิน QSAR ชั่วคราว");
           shouldRun = true;
           break;
         case "clear":
@@ -3068,6 +3081,7 @@ export default function StudioPage() {
           {activeNavigationItem !== "substances" && mode === "nodes" && (
             <div className="absolute inset-0">
               <FormulaGraph
+                qsarEnabled={qsarEnabled}
                 key={`${projectId ?? "standalone"}:${graphOwnerId}`}
                 seed={activeFormula?.items ?? []}
                 region={activeFormula?.region ?? region}
@@ -3169,8 +3183,8 @@ export default function StudioPage() {
                   <span aria-hidden="true" className="h-5 w-px shrink-0 bg-slate-200" />
                   <button
                     type="button"
-                    disabled={assessing || !activeFormula}
-                    title={!activeFormula ? "เลือกกล่องสูตรก่อนประเมิน" : assessing ? "กำลังประเมินสูตร" : completed ? "ประเมินอีกครั้ง" : "ประเมินสูตร"}
+                    disabled={!qsarEnabled || assessing || !activeFormula}
+                    title={!qsarEnabled ? "พักการประเมิน QSAR ชั่วคราว" : !activeFormula ? "เลือกกล่องสูตรก่อนประเมิน" : assessing ? "กำลังประเมินสูตร" : completed ? "ประเมินอีกครั้ง" : "ประเมินสูตร"}
                     onClick={() => {
                       setEraseMode(false); // กดประเมิน = กลับมาโหมด paint ผลลัพธ์
                       run();
@@ -3178,7 +3192,7 @@ export default function StudioPage() {
                     className="flex h-11 w-[7.5rem] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-brand-dark px-2 text-xs font-semibold text-white transition-colors hover:bg-brand-dark/90 disabled:cursor-not-allowed disabled:opacity-50 md:h-9 md:w-auto md:min-w-28 md:gap-2 md:px-4 md:text-[12px]"
                   >
                     <SemanticIcon name={assessing || completed ? "refresh" : "play"} className="size-4" />
-                    <span>{assessing ? "กำลังประเมิน" : completed ? "ประเมินใหม่" : "เริ่มประเมิน"}</span>
+                    <span>{!qsarEnabled ? "QSAR ปิดอยู่" : assessing ? "กำลังประเมิน" : completed ? "ประเมินใหม่" : "เริ่มประเมิน"}</span>
                   </button>
                 </div>
               </div>

@@ -9,6 +9,18 @@ from app.main import app
 from app.services import assessment_service
 
 
+def test_paused_qsar_rejects_new_jobs_before_validation_or_dispatch(monkeypatch):
+    monkeypatch.setattr(settings, "ASSESSMENT_EXECUTION_MODE", "disabled")
+    create = Mock(side_effect=AssertionError("paused requests must not create jobs"))
+    monkeypatch.setattr(assessment_service, "create_assessment", create)
+    with TestClient(app) as client:
+        assert client.get("/api/assessments/availability").json() == {"enabled": False}
+        response = client.post("/api/assessments/", json={"formula": [], "region": "face"})
+    assert response.status_code == 503
+    assert "paused" in response.json()["detail"]
+    create.assert_not_called()
+
+
 def test_inline_mode_schedules_local_inference_without_redis(monkeypatch):
     fake_db = Mock()
 

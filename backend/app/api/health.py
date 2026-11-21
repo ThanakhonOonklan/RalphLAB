@@ -59,7 +59,7 @@ async def ready():
             checks["redis"] = "ok"
         except Exception as e:
             checks["redis"] = f"fail: {e.__class__.__name__}"
-    else:
+    elif settings.ASSESSMENT_EXECUTION_MODE == "inline":
         checks["inline_inference"] = "ok"
     ready = all(v == "ok" for v in checks.values())
     payload = {

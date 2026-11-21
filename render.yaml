@@ -28,7 +28,7 @@ services:
       - key: SCIENTIFIC_RUNTIME_DIR
         value: /scientific
       - key: ASSESSMENT_EXECUTION_MODE
-        value: inline
+        value: disabled
       - key: GROQ_API_KEY
         sync: false
       - key: GROQ_MODEL

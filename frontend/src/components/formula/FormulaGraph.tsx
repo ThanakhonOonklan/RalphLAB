@@ -402,11 +402,14 @@ const resultScopeFromFlow = (nodes: Node[], edges: Edge[], resultNodeId: string)
     resultNodeId,
   );
 
+const QsarEnabledContext = createContext(false);
+
 function ResultNode({
   id,
   data,
   selected,
 }: NodeProps<ResultData>) {
+  const qsarEnabled = useContext(QsarEnabledContext);
   const onRemove = useContext(RemoveNodeContext);
   const { getNodes, getEdges, setNodes } = useReactFlow();
   const graphNodes = useNodes();
@@ -434,6 +437,7 @@ function ResultNode({
   const concentrationExceeded = connectedConcentration > 100;
 
   const run = async () => {
+    if (!qsarEnabled) return;
     const allEdges = getEdges();
     const allNodes = getNodes();
     const scope = resultScopeFromFlow(allNodes, allEdges, id);
@@ -606,10 +610,10 @@ function ResultNode({
 
         <button
           onClick={run}
-          disabled={busy || concentrationExceeded}
+          disabled={!qsarEnabled || busy || concentrationExceeded}
           className="nodrag nopan flex h-8 w-full items-center justify-center rounded-lg bg-brand-dark px-3 text-xs font-semibold text-white transition-colors hover:bg-brand-dark/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {busy ? "กำลังประเมิน…" : <span className="inline-flex items-center gap-1"><SemanticIcon name="play" className="size-3" /> ประเมิน</span>}
+          {!qsarEnabled ? "QSAR ปิดอยู่" : busy ? "กำลังประเมิน…" : <span className="inline-flex items-center gap-1"><SemanticIcon name="play" className="size-3" /> ประเมิน</span>}
         </button>
 
         {data.status === "failed" && !concentrationExceeded && (
@@ -1604,6 +1608,7 @@ function GraphInner({
 }
 
 export default function FormulaGraph({
+  qsarEnabled = false,
   seed = [],
   region = "face",
   projectId = null,
@@ -1614,6 +1619,7 @@ export default function FormulaGraph({
   syncWithSeed = false,
   onRegionChange,
 }: {
+  qsarEnabled?: boolean;
   seed?: FormulaItem[];
   region?: Region;
   projectId?: number | null;
@@ -1628,17 +1634,19 @@ export default function FormulaGraph({
 }) {
   return (
     <ReactFlowProvider>
-      <GraphInner
-        seed={seed}
-        region={region}
-        projectId={projectId}
-        snapshot={snapshot}
-        onSnapshotPreview={onSnapshotPreview}
-        onSnapshotChange={onSnapshotChange}
-        onSaveFormula={onSaveFormula}
-        syncWithSeed={syncWithSeed}
-        onRegionChange={onRegionChange}
-      />
+      <QsarEnabledContext.Provider value={qsarEnabled}>
+        <GraphInner
+          seed={seed}
+          region={region}
+          projectId={projectId}
+          snapshot={snapshot}
+          onSnapshotPreview={onSnapshotPreview}
+          onSnapshotChange={onSnapshotChange}
+          onSaveFormula={onSaveFormula}
+          syncWithSeed={syncWithSeed}
+          onRegionChange={onRegionChange}
+        />
+      </QsarEnabledContext.Provider>
     </ReactFlowProvider>
   );
 }

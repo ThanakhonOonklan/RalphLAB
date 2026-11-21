@@ -22,10 +22,21 @@ from app.services import assessment_service
 router = APIRouter()
 
 
+@router.get("/availability")
+async def assessment_availability():
+    return {"enabled": settings.ASSESSMENT_EXECUTION_MODE != "disabled"}
+
+
+def require_assessment_enabled():
+    if settings.ASSESSMENT_EXECUTION_MODE == "disabled":
+        raise HTTPException(status_code=503, detail="QSAR assessments are paused in RalphLAB")
+
+
 @router.post(
     "/",
     response_model=CreateAssessmentResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(require_assessment_enabled)],
 )
 async def create_assessment(
     payload: CreateAssessmentRequest,

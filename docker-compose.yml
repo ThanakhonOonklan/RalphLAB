@@ -20,6 +20,7 @@ services:
 
   # -------------- Redis --------------
   redis:
+    profiles: ["qsar"]
     image: redis:7-alpine
     container_name: ralphguard-redis
     restart: unless-stopped
@@ -43,12 +44,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-ralphguard}:${POSTGRES_PASSWORD:-ralphguard_dev}@postgres:5432/${POSTGRES_DB:-ralphguard}
       REDIS_URL: redis://redis:6379/0
-      ASSESSMENT_EXECUTION_MODE: ${ASSESSMENT_EXECUTION_MODE:-queue}
+      ASSESSMENT_EXECUTION_MODE: ${ASSESSMENT_EXECUTION_MODE:-disabled}
       API_SECRET_KEY: ${API_SECRET_KEY:-dev-secret-change-me}
       AUTH_SECRET: ${AUTH_SECRET:-dev-auth-secret-change-before-deploy}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
@@ -70,6 +69,7 @@ services:
 
   # -------------- Scientific Worker --------------
   worker:
+    profiles: ["qsar"]
     build:
       context: ./scientific
       dockerfile: Dockerfile

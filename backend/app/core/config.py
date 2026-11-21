@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     # Redis / Queue
     REDIS_URL: str = "redis://redis:6379/0"
     QUEUE_STREAM_NAME: str = "ralphguard:jobs"
-    ASSESSMENT_EXECUTION_MODE: Literal["queue", "inline"] = "queue"
+    ASSESSMENT_EXECUTION_MODE: Literal["disabled", "queue", "inline"] = "disabled"
     ASSESSMENT_WAIT_FOR_RESULT: bool = False
 
     # Models (read-only mount of scientific/models — used for the model card)

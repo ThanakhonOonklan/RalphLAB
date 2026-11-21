@@ -1,200 +1,40 @@
-# RalphGuard
+# RalphLAB
 
-> **In-silico Irritation & Toxicity Risk Screening Platform**
-> ระบบประเมินความเสี่ยงการระคายเคืองและความเป็นพิษของสารเคมีด้วยแบบจำลองคอมพิวเตอร์ เพื่อลดการพึ่งพาการทดลองในสัตว์
+พื้นที่พัฒนาของทีม RalphLAB เริ่มจากไฟล์ทั้งหมดของ [RalphGuard / jay-frontend ที่ commit 9218cb59](https://github.com/lurk-z/ralphguard/commit/9218cb59ed015be95587e055521bdad04d0e1714) ประวัติของ repo นี้เริ่มที่ snapshot ดังกล่าว ตามด้วยการตั้งค่าสำหรับทีมและการพัก QSAR
 
-[![Status](https://img.shields.io/badge/status-in--development-yellow)]()
-[![Category](https://img.shields.io/badge/NSC2026-Category%2014-blue)]()
+## เริ่มพัฒนา
 
----
+ใช้ Git, Node.js 20 ขึ้นไป และ Docker Compose v2 ตัวอย่างด้านล่างใช้ PowerShell
 
-## 📖 About Project
-
-RalphGuard เป็นเว็บแอปพลิเคชันสำหรับประเมินความเสี่ยงเบื้องต้นของสารเคมีหรือส่วนประกอบในผลิตภัณฑ์ ที่อาจก่อให้เกิดการระคายเคืองต่อผิวหนัง ดวงตา หรือมีความเป็นพิษ โดยใช้การวิเคราะห์โครงสร้างโมเลกุลร่วมกับแบบจำลองเชิงคำนวณ
-
-**4 Endpoints ที่ประเมิน:**
-- 🖐️ Skin Irritation (การระคายเคืองผิวหนัง)
-- 👁️ Eye Irritation (การระคายเคืองดวงตา)
-- 🛡️ Skin Sensitization (การแพ้สัมผัสผิวหนัง)
-- 🧪 Acute Toxicity (ความเป็นพิษเฉียบพลัน)
-
-**ฟีเจอร์หลัก:**
-- รับข้อมูลสารในรูปแบบชื่อสาร, SMILES, หรือไฟล์ CSV
-- Formula Builder สำหรับสร้างสูตรผสมแบบ interactive
-- 3D Anatomy visualization แสดงผลตามช่วงเวลา Day 1 / 3 / 7
-- 3-Layer Confidence System (AD + Probability + Rule-based)
-- รายงาน PDF สรุปผลและข้อจำกัด
-
----
-
-## 🏗️ Architecture
-
-```
-┌─────────────┐    ┌──────────────┐    ┌──────────────┐
-│  Frontend   │───▶│  Backend API │───▶│  Scientific  │
-│  Next.js    │    │   FastAPI    │    │   Worker     │
-│  React 3F   │    │              │    │   (RDKit)    │
-└─────────────┘    └──────┬───────┘    └──────┬───────┘
-                          │                    │
-                   ┌──────▼────────────────────▼──┐
-                   │   PostgreSQL  +  Redis        │
-                   └───────────────────────────────┘
+```powershell
+git clone https://github.com/lurk-z/RalphLAB.git
+cd RalphLAB
+Copy-Item .env.example .env
 ```
 
----
+เปิด `.env` แล้วตั้ง `AUTH_SECRET` และ `NEXTAUTH_SECRET` เป็นค่าสุ่มยาว **ค่าเดียวกัน** สำหรับเครื่องของคุณ ตั้ง `GOOGLE_CLIENT_ID` และ `GOOGLE_CLIENT_SECRET` ของ OAuth client สำหรับพัฒนาที่อนุญาต callback `http://localhost:3000/api/auth/callback/google` การล็อกอินเพื่อเปิดโปรเจกต์ต้องใช้ค่าเหล่านี้ ตั้ง `GROQ_API_KEY` หากต้องการใช้ผู้ช่วยแชต
 
-## 🚀 Quick Start
-
-### Prerequisites
-- Docker & Docker Compose
-- Node.js 20+ (สำหรับ frontend dev)
-- Python 3.11+ (สำหรับ scientific dev)
-
-### Run backend services with Docker Compose and frontend with npm
-
-```bash
-# Clone repository
-git clone <repo-url>
-cd ralphguard
-
-# Copy environment variables
-cp .env.example .env
-
-# Windows: verify that the cloned branch includes models and UI assets
-powershell -ExecutionPolicy Bypass -File .\scripts\verify-clone-ready.ps1
-
-# Build and start PostgreSQL, Redis, FastAPI and the scientific worker
-docker compose up --build
-
-# In a second terminal, start Next.js (the frontend is intentionally not in Docker)
+```powershell
+# Next.js อ่านค่าจาก frontend/.env.local ซึ่ง Git ไม่ติดตาม
+Get-Content .env | Select-String '^(NEXT_PUBLIC_API_URL|NEXTAUTH_URL|NEXTAUTH_SECRET|GOOGLE_CLIENT_ID|GOOGLE_CLIENT_SECRET)=' | ForEach-Object { $_.Line } | Set-Content -Encoding ascii frontend/.env.local
+docker compose up --build -d
 cd frontend
 npm ci
 npm run dev
-
-# Access:
-# Frontend:    http://localhost:3000
-# Backend API: http://localhost:8000
-# API Docs:    http://localhost:8000/docs
 ```
 
-### Local Development (without Docker)
+เปิดเว็บที่ `http://localhost:3000` และ API ที่ `http://localhost:8000/docs` สำหรับงานหน้า landing page สามารถเริ่มจาก `cd frontend`, `npm ci` และ `npm run dev` ได้ทันที ส่วน Studio ใช้ backend และการล็อกอิน
 
-**Frontend:**
-```bash
-cd frontend
-npm install
-npm run dev
-```
+## การทำงานร่วมกัน
 
-**Backend:**
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
+- **main** เป็นฐานรวมงาน เปิด pull request เข้าสาขานี้และดูผล CI ก่อนรวมงาน
+- **GOD** เป็นสาขาของหัวหน้าทีม รับผิดชอบงานส่วนที่ 1 ได้แก่ ระบบ Agent กฎส่งใบงานระหว่างบทบาท จุดรออนุมัติ และการเชื่อม QSAR ในภายหลัง ใช้ `git switch GOD` หลัง clone
+- สมาชิกที่มีสิทธิ์เขียนสร้างสาขาจาก main ด้วย `git switch -c feature/<ชื่องาน> origin/main` แล้ว `git push -u origin HEAD` สมาชิกทั่วไปให้ **Fork** ก่อน แล้ว clone จาก fork ของตัวเอง สร้างและ push สาขาไปที่ fork จากนั้นเปิด pull request ไปยัง `lurk-z/RalphLAB:main`
 
----
+## สถานะ QSAR
 
-## 📂 Project Structure
+ค่าเริ่มต้นคือ `ASSESSMENT_EXECUTION_MODE=disabled` ในโหมดนี้ Compose เริ่มเฉพาะ PostgreSQL และ API หน้า Studio และ Node Graph อ่านสถานะจาก `GET /api/assessments/availability` ปุ่มประเมินแสดงว่าปิดอยู่ การส่งงานใหม่เข้า API ได้ HTTP 503 ก่อนสร้าง job ลงฐานข้อมูลหรือเข้าคิว ทีมยังแก้สูตรและเปิดผลเก่าที่มีสิทธิ์อ่านได้
 
-```
-ralphguard/
-├── frontend/              # Next.js + TypeScript + Tailwind + R3F
-│   ├── app/               # App router pages
-│   ├── components/        # UI components
-│   ├── lib/               # API client, utilities
-│   └── public/            # Static assets
-├── backend/               # FastAPI
-│   ├── app/
-│   │   ├── api/           # API routes
-│   │   ├── core/          # Config, security
-│   │   ├── models/        # SQLAlchemy models
-│   │   ├── schemas/       # Pydantic schemas
-│   │   └── services/      # Business logic
-│   └── tests/
-├── scientific/            # RDKit + ML pipeline
-│   ├── descriptors.py     # Molecular descriptors
-│   ├── fingerprints.py    # Morgan fingerprints
-│   ├── qsar/              # QSAR models (4 endpoints)
-│   ├── applicability.py   # AD check (k-NN)
-│   ├── confidence.py      # 3-layer confidence
-│   ├── mixture.py         # Mixture risk calculation
-│   └── worker.py          # Redis queue consumer
-├── data/
-│   ├── raw/               # Downloaded datasets
-│   └── processed/         # Cleaned & split datasets
-├── docs/
-│   ├── report/            # Final thesis report
-│   └── manual/            # User & install manuals
-├── docker-compose.yml
-├── .env.example
-└── README.md
-```
+เมื่อต้องการทดสอบ QSAR ในเครื่อง ให้เปลี่ยนค่าใน `.env` เป็น `ASSESSMENT_EXECUTION_MODE=queue` แล้วใช้ `docker compose --profile qsar up --build -d` และรีเฟรช Studio เมื่อทดสอบเสร็จใช้ `docker compose --profile qsar stop worker redis` ตั้งค่ากลับเป็น `disabled` แล้ว `docker compose up -d` เพื่ออัปเดต backend
 
----
-
-## 🧪 Scientific Methodology
-
-ดูรายละเอียดในไฟล์ `docs/report/` และ `scientific/README.md`
-
-**Pipeline:**
-1. Input → SMILES validation (RDKit canonicalize)
-2. Compute molecular descriptors + Morgan fingerprint
-3. Applicability Domain check (k-NN Tanimoto distance)
-4. QSAR prediction (Random Forest baseline)
-5. Rule-based toxicity flag verification
-6. 3-Layer Confidence aggregation
-7. Mixture handling + Region sensitivity adjustment
-8. Time-course estimation (Day 1 / 3 / 7)
-
----
-
-## 📊 Datasets Used
-
-| Endpoint | Source | Size |
-|----------|--------|------|
-| Acute Toxicity | EPA CATMoS | ~11,000 chemicals |
-| Skin Sensitization | ICCVAM LLNA | ~200 chemicals |
-| Skin Irritation | ECHA / Literature | ~200 chemicals |
-| Eye Irritation | ECETOC Reference DB | ~150 chemicals |
-
----
-
-## ⚠️ Disclaimer
-
-RalphGuard เป็นเครื่องมือคัดกรองความเสี่ยงเบื้องต้นด้วยแบบจำลองคอมพิวเตอร์ (in-silico)
-
-- ❌ ไม่ใช่การรับรองความปลอดภัยของยา เครื่องสำอาง หรือสารเคมี
-- ❌ ไม่ใช้แทนการทดสอบมาตรฐานในห้องปฏิบัติการ
-- ❌ ไม่ใช้แทนการประเมินโดยผู้เชี่ยวชาญ
-- ❌ ไม่ให้คำแนะนำทางการแพทย์ และไม่ใช้กับข้อมูลผู้ป่วยจริง
-
-ผลลัพธ์ทุกส่วนมาจากแบบจำลองคอมพิวเตอร์และต้องได้รับการตรวจสอบเพิ่มเติมก่อนนำไปใช้จริง
-
----
-
-## 🙏 Acknowledgment
-
-โครงการนี้ได้รับทุนสนับสนุนจาก **สำนักงานพัฒนาวิทยาศาสตร์และเทคโนโลยีแห่งชาติ (สวทช.)** ภายใต้การแข่งขันพัฒนาโปรแกรมคอมพิวเตอร์แห่งประเทศไทย ครั้งที่ 28 (NSC 2026) หมวด 14: โปรแกรมเพื่องานการพัฒนาด้านวิทยาศาสตร์และเทคโนโลยี
-
----
-
-## 👥 Team
-
-- **นายสุรวิทย์ สุขเจริญ** — Project Lead, Frontend Development
-- **นายธนกรณ์ อ่อนกลั่น** — Backend & Data, System Testing
-
-**Institution:** ภาควิชาเทคโนโลยีสารสนเทศ คณะเทคโนโลยีและการจัดการอุตสาหกรรม
-มหาวิทยาลัยเทคโนโลยีพระจอมเกล้าพระนครเหนือ
-
----
-
-## 📄 License
-
-Copyright © 2026 King Mongkut's University of Technology North Bangkok. All rights reserved.
-
-Software developed under NSC 2026 funding by NSTDA. See LICENSE for full terms.
-# ralphguard
-"# ralphguard" 
+ตรวจบริการเริ่มต้นด้วย `docker compose config --services` และตรวจ TypeScript ใน `frontend` ด้วย `npm run type-check` โครงสร้างเดิมและรายละเอียดโมเดลอยู่ใน [คู่มือ RalphGuard](docs/RALPHGUARD-README.md)
