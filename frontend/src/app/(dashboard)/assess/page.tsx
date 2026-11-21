@@ -95,6 +95,7 @@ import {
   resolveManualSubstanceRegistryMatch,
   searchManualSubstanceSuggestions,
 } from "@/lib/manual-substance";
+import { chatAssessment } from "@/lib/lab-station/assessment";
 import { parseProjectRouteId } from "@/lib/project-routing";
 import { isAbortError, logRequestFailure } from "@/lib/request-reliability";
 import {
@@ -2217,7 +2218,12 @@ export default function StudioPage({ searchParams }: { searchParams: { tab?: str
         <a href={projectId ? "/projects" : "/"} className="grid size-9 place-items-center rounded-lg hover:bg-muted" aria-label="กลับหน้าหลัก"><ArrowLeft className="size-4" /></a>
         {workspaceTabs}
       </header>
-      <LabView />
+      <section aria-label="ห้องแล็บ 3D" className="relative min-h-0 overflow-hidden">
+        <LabView embedded projectId={projectId} formula={activeFormula ? {
+          id: activeFormula.id, name: productName, items: activeFormula.items,
+          assessment: chatAssessment(assessment, productName),
+        } : undefined} />
+      </section>
     </div>;
   }
   return (

@@ -45,6 +45,9 @@ export default function AgentFollow({ team, hitboxes, followed, onSelect, onStop
     const pick = (ev: PointerEvent): Role | 'sample' | null => {
       const r = el.getBoundingClientRect()
       ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1)
+      // A pointer event can arrive between a moving agent update and the next render.
+      camera.updateWorldMatrix(true, false)
+      for (const box of boxes) box.updateWorldMatrix(true, false)
       ray.setFromCamera(ndc, camera)
       if (onSample && sample.visible && ray.intersectObject(sample, false).length) return 'sample'
       const hit = ray.intersectObjects(boxes, false)[0]
