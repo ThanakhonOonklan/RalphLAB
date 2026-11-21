@@ -4,7 +4,7 @@ import type { Transcript } from "./chat-history.ts";
 
 export type DemoScreen =
   | { kind: "inbox" }
-  | { kind: "private"; threadId?: string }
+  | { kind: "private"; threadId?: string; highlightId?: string }
   | { kind: "group"; jobId: string; highlightId?: string };
 
 type Conversation = {

@@ -21,6 +21,7 @@ import {
   type LabDemoState,
   type LabEvent,
 } from "./events.ts";
+import { pendingClarifications } from "./agent-status.ts";
 import { classifyIntent, ownerFor, type Intent } from "./intent.ts";
 import { assessmentViewRequested, demoAssessment, requestedView, type ChatAssessment } from "./chat-assessment.ts";
 
@@ -448,14 +449,17 @@ export function createLabDemo({
     const base = privateThread(agent);
     if (threadId !== base && !threadId.startsWith(base + ":")) throw new Error("Invalid private conversation");
     const userMessageId = nextMessageId();
-    store.emit(scope, { type: "message.user", messageId: userMessageId, to: agent, text, experimentId, threadId });
+    const question = pendingClarifications(store.get(scope).messages).get(threadId);
+    const intent = question && /^(?:ขอ)?ดูข้อมูล(?:ที่มีอยู่)?(?:ครับ|ค่ะ)?$/u.test(text.trim())
+      ? { kind: "read" as const } : classifyIntent(text);
+    const answerTo = question?.from === agent && intent.kind !== "clarify" ? question.messageId : undefined;
+    store.emit(scope, { type: "message.user", messageId: userMessageId, to: agent, text, answerTo, experimentId, threadId });
 
     if (/คุณเป็นใคร|หน้าที่ของคุณ|ทำหน้าที่อะไร|who are you|your role/i.test(text)) {
       store.emit(scope, { type: "message.agent", messageId: nextMessageId(), from: agent, inReplyTo: userMessageId,
         text: ROLE_EN[agent] + " · " + ROLE_SCOPE[agent], experimentId, threadId });
       return { intent: { kind: "read" } };
     }
-    const intent = classifyIntent(text);
     {
       const invitations = Object.values(store.get(scope).jobs).filter(job =>
         job.invitation?.status === "pending" && job.invitation.threadId === threadId && store.get(scope).tasks[job.invitation.taskId]?.owner === agent);
@@ -475,7 +479,7 @@ export function createLabDemo({
       const reply = assessment ? `ผลคัดกรองจำลองของ ${assessment.formulaName} จากการทดลองในแชตนี้`
         : intent.kind === "read" ? readReply(intent.subject) : intent.question;
       const activity = intent.kind === "read" ? "ตรวจข้อมูลสูตรของการทดลอง" : "ตรวจประเภทคำขอ";
-      store.emit(scope, { type: "message.agent", messageId: nextMessageId(), from: agent, inReplyTo: userMessageId, activity, text: reply, assessment, experimentId, threadId });
+      store.emit(scope, { type: "message.agent", messageId: nextMessageId(), from: agent, inReplyTo: userMessageId, activity, clarification: intent.kind === "clarify", text: reply, assessment, experimentId, threadId });
       return { intent };
     }
 

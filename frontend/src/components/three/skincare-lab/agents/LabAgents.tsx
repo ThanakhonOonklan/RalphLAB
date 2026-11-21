@@ -10,7 +10,9 @@ import type { LabRoom } from '../plainRoom'
 import { NavGrid, type GridData } from './nav'
 import { Agent, Sample, type Clip, type StationKind } from './agent'
 import type { Role, Team } from './workflow'
+import type { AgentStatuses } from '@/lib/lab-demo/agent-status'
 import type { Progress } from './handoffDemo'
+import AgentStatusLabel from './AgentStatusLabel'
 import AgentFollow from './AgentFollow'
 import { createLoopControl } from './loopControl'
 
@@ -59,10 +61,11 @@ function blobShadow() {
  * The five Ralph Lab agents, each at its own station, walking the lab workflow:
  * brief → research → sample V1 → endpoint checks → evaluation and rework, then again.
  */
-export default function LabAgents({ room, followed, onSelect, onStopFollowing, onHandoff, onSample }: {
+export default function LabAgents({ room, followed, statuses, onSelect, onStopFollowing, onHandoff, onSample }: {
   room: LabRoom
   followed: Role | null
-  onSelect?: (role: Role) => void
+  statuses: AgentStatuses
+  onSelect?: (role: Role, threadId?: string, messageId?: string) => void
   onStopFollowing: () => void
   onHandoff?: (progress: Progress) => void
   onSample?: () => void
@@ -160,6 +163,10 @@ export default function LabAgents({ room, followed, onSelect, onStopFollowing, o
   return (
     <>
       <primitive object={group} />
+      {ROLES.map(role => {
+        const status = statuses[role]
+        return status && <AgentStatusLabel key={role} agent={team[role]} status={status} onSelect={onSelect} />
+      })}
       <AgentFollow team={team} hitboxes={hitboxes} followed={followed} onSelect={onSelect} onStopFollowing={onStopFollowing} sample={sample.mesh} onSample={onSample} />
     </>
   )

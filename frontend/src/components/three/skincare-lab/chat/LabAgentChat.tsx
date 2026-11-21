@@ -103,7 +103,7 @@ export default function LabAgentChat({ agent, formula, chat, onSelectAgent, onCl
   const contentRef = useRef<HTMLDivElement>(null)
   const followScroll = useRef(true)
   const job = screen.kind === 'group' ? agentDemo?.state.jobs[screen.jobId] : undefined
-  const [highlightId, setHighlightId] = useState<string | null>(screen.kind === 'group' ? screen.highlightId ?? null : null)
+  const [highlightId, setHighlightId] = useState<string | null>(null)
   const role = { english: ROLE_EN[agent], scope: ROLE_SCOPE[agent] }
   const name = role.english
   const workflowProject = agentDemo?.state.projectId
@@ -169,6 +169,14 @@ export default function LabAgentChat({ agent, formula, chat, onSelectAgent, onCl
     return () => observer.disconnect()
   }, [thread?.id, demoThread])
 
+  // A badge can be clicked again while this panel is still on a different history entry.
+  useEffect(() => {
+    if (screen.kind === 'inbox' || !screen.highlightId) return
+    if (screen.kind === 'private' && screen.threadId) setSelectedId(screen.threadId)
+    setOpenMenu(null)
+    setHighlightId(screen.highlightId)
+  }, [screen])
+
   // Arriving through a pointer: bring the target message into view and outline it briefly.
   useEffect(() => {
     if (!highlightId) return
@@ -180,7 +188,7 @@ export default function LabAgentChat({ agent, formula, chat, onSelectAgent, onCl
     }
     const timer = window.setTimeout(() => setHighlightId(null), 2500)
     return () => window.clearTimeout(timer)
-  }, [highlightId])
+  }, [highlightId, demoThread, screen])
 
   function pickThread(id: string | null) {
     setSelectedId(id)
@@ -210,7 +218,7 @@ export default function LabAgentChat({ agent, formula, chat, onSelectAgent, onCl
       setInput('')
       if (job) agentDemo.submitGroup(job.jobId, text)
       else {
-        const id = thread?.id ?? privateThreadId(agentDemo.state.projectId, agentDemo.experimentId, agent) + ':' + makeChatId()
+        const id = thread?.id ?? linkedThread ?? privateThreadId(agentDemo.state.projectId, agentDemo.experimentId, agent) + ':' + makeChatId()
         setSelectedId(id)
         void agentDemo.submit(agent, text, id)
       }

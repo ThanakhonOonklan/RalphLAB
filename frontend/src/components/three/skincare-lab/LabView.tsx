@@ -1,7 +1,7 @@
 'use client'
 
 import dynamic from 'next/dynamic'
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import SceneBoundary from './SceneBoundary'
 import { MessageCircle } from 'lucide-react'
 import { ROLE_LABEL } from './agents/roles'
@@ -10,6 +10,7 @@ import type { Role } from './agents/workflow'
 import LabAgentChat from './chat/LabAgentChat'
 import { useLabAgentChat, type ChatFormula } from './chat/useLabAgentChat'
 import { useAgentDemo } from './chat/useAgentDemo'
+import { chatAgentStatuses, demoAgentStatuses } from '@/lib/lab-demo/agent-status'
 import type { DemoScreen } from '@/lib/lab-demo/conversations'
 
 // WebGL scene — client-only.
@@ -45,9 +46,13 @@ export default function LabView({ embedded = false, projectId = null, formula }:
   const drag = useRef<{ pointerId: number; x: number; width: number; maxWidth: number; nextWidth: number } | null>(null)
   const resizeFrame = useRef(0)
   const chat = useLabAgentChat(projectId, agentDemo.userId, demoChat, progress)
+  const statuses = useMemo(() => agentDemoOn
+    ? demoAgentStatuses(agentDemo.state)
+    : chatAgentStatuses(chat.threads, chat.pending, chat.activity),
+    [agentDemoOn, agentDemo.state, chat.threads, chat.pending, chat.activity])
   const handleReady = useCallback(() => setReady(true), [])
-  const selectAgent = useCallback((role: Role | null, threadId?: string) => {
-    setDemoScreen({ kind: 'private', threadId })
+  const selectAgent = useCallback((role: Role | null, threadId?: string, highlightId?: string) => {
+    setDemoScreen({ kind: 'private', threadId, highlightId })
     setSampleOpen(0)
     setAgent(role)
     setCameraAgent(role)
@@ -121,7 +126,7 @@ export default function LabView({ embedded = false, projectId = null, formula }:
       <div ref={splitRef} className="lab-chat-split">
         <div className="relative min-h-0 min-w-0 flex-1 select-none overflow-hidden">
           <div className="lab-room-viewport">
-            <SceneBoundary><LabRoomCanvas onReady={handleReady} chatOpen={agent !== null} cameraAgent={cameraAgent} onAgentSelect={selectAgent} onStopFollowing={stopFollowing} onHandoff={demoChat ? setProgress : undefined} onSample={demoChat ? inspectSample : undefined} />
+            <SceneBoundary><LabRoomCanvas statuses={statuses} onReady={handleReady} chatOpen={agent !== null} cameraAgent={cameraAgent} onAgentSelect={selectAgent} onStopFollowing={stopFollowing} onHandoff={demoChat ? setProgress : undefined} onSample={demoChat ? inspectSample : undefined} />
               {!ready && <div role="status" className="pointer-events-none absolute inset-0 grid place-items-center bg-[#c9d5df] text-sm text-slate-500">กำลังโหลดห้องแล็บ</div>}
             </SceneBoundary>
           </div>

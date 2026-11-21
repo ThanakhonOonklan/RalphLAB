@@ -7,6 +7,7 @@ import { assessmentText } from '@/lib/lab-demo/chat-assessment'
 import ChatActivity, { elapsedLabel } from './ChatActivity'
 import { ROLE_EN } from '@/lib/lab-demo/engine'
 import type { AgentRole, ChatMessage, Handoff, HandoffStatus, Job, StepStatus, Task } from '@/lib/lab-demo/events'
+import { currentTaskStep, pendingClarifications } from '@/lib/lab-demo/agent-status'
 import { messageJobId } from '@/lib/lab-demo/conversations'
 import { AgentFace, UserFace } from './DemoConversations'
 import MessageMeta from './MessageMeta'
@@ -70,7 +71,7 @@ const STEP: Record<StepStatus, { label: string; Icon: typeof Circle; className: 
  * its own open state, so folding one agent's list never folds another's. Rows update in place.
  */
 function TaskChecklist({ task, elapsed }: { task: Task; elapsed: string }) {
-  const active = task.steps.find((step) => step.status === 'waiting' || step.status === 'active')
+  const active = currentTaskStep(task)
   const label = task.status === 'completed' ? elapsed : active?.note || active?.label || 'กำลังทำงาน…'
   return (
     <div data-task-id={task.taskId} data-task-status={task.status}>
@@ -118,6 +119,7 @@ export default function AgentDemoThread({ demo, threadId, job, highlightId, onOp
     if (e.type === 'task.planned') started.set(e.taskId, e.occurredAt)
     if (e.type === 'task.completed') finished.set(e.taskId, e.occurredAt)
   }
+  const clarification = job ? undefined : pendingClarifications(messages).get(threadId)
   let lastSpeaker: AgentRole | 'user' | 'system' | null = null
 
   return messages.map((message: ChatMessage) => {
@@ -202,6 +204,11 @@ export default function AgentDemoThread({ demo, threadId, job, highlightId, onOp
           {message.kind === 'agent' && message.activity && <ChatActivity label={elapsedLabel(requests.get(message.inReplyTo ?? ''), times.get(message.sequence))}>{message.activity}</ChatActivity>}
           {receipt ? <span role="img" aria-label="ส่งถึงผู้รับแล้ว" title="ส่งถึงผู้รับแล้ว" className="inline-flex align-middle text-teal-700"><CircleCheck aria-hidden="true" className="size-4" /></span>
             : <p className="whitespace-pre-wrap break-words leading-relaxed [overflow-wrap:anywhere]">{message.text}</p>}
+          {clarification?.messageId === message.messageId && <div className="flex flex-wrap gap-3 py-1 text-xs">
+            {['ดูข้อมูลที่มีอยู่', 'เริ่มทดลองสูตรใหม่'].map(answer => <button key={answer} type="button"
+              className="rounded px-1 py-2 text-teal-800 hover:underline focus-visible:ring-2 focus-visible:ring-teal-600"
+              onClick={() => void demo.submit(clarification.from, answer, threadId)}>{answer}</button>)}
+          </div>}
           {assessment && <AssessmentReply data={assessment} />}
           {task?.workThreadId === threadId && task.steps.length > 0 && <TaskChecklist task={task} elapsed={elapsedLabel(started.get(task.taskId), finished.get(task.taskId))} />}
           {!receipt && <MessageMeta text={assessment ? message.text + '\n' + assessmentText(assessment) : message.text} time={times.get(message.sequence)} />}

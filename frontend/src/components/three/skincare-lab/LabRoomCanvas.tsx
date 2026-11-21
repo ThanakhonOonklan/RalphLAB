@@ -8,6 +8,7 @@ import CameraRig from './CameraRig'
 import { prepareRoom, type LabRoom } from './plainRoom'
 import LabAgents from './agents/LabAgents'
 import type { Role } from './agents/workflow'
+import type { AgentStatuses } from '@/lib/lab-demo/agent-status'
 import type { Progress } from './agents/handoffDemo'
 
 // The three-room Ralph Lab from Blender, shown exactly as exported.
@@ -19,7 +20,8 @@ type Props = {
   onReady?: () => void
   chatOpen: boolean
   cameraAgent: Role | null
-  onAgentSelect?: (role: Role) => void
+  statuses: AgentStatuses
+  onAgentSelect?: (role: Role, threadId?: string, messageId?: string) => void
   onStopFollowing: () => void
   onHandoff?: (progress: Progress) => void
   onSample?: () => void
@@ -116,7 +118,7 @@ function Backdrop({ room }: { room: LabRoom }) {
   )
 }
 
-function Room({ onReady, chatOpen, cameraAgent, onAgentSelect, onStopFollowing, onHandoff, onSample }: Props) {
+function Room({ onReady, chatOpen, cameraAgent, statuses, onAgentSelect, onStopFollowing, onHandoff, onSample }: Props) {
   const gltf = useGLTF(MODEL_URL)
   const room = useMemo(() => prepareRoom(gltf), [gltf])
 
@@ -175,7 +177,7 @@ function Room({ onReady, chatOpen, cameraAgent, onAgentSelect, onStopFollowing, 
       <primitive object={room.root} />
       {/* The five agents load after the room is on screen. */}
       <Suspense fallback={null}>
-        <LabAgents room={room} followed={cameraAgent} onSelect={onAgentSelect} onStopFollowing={onStopFollowing} onHandoff={onHandoff} onSample={onSample} />
+        <LabAgents room={room} statuses={statuses} followed={cameraAgent} onSelect={onAgentSelect} onStopFollowing={onStopFollowing} onHandoff={onHandoff} onSample={onSample} />
       </Suspense>
       {/* Restrained grounding shadow under furniture legs; baked once (static room). */}
       <ContactShadows

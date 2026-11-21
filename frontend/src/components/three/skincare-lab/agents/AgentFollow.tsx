@@ -2,12 +2,10 @@
 
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
-import { Html } from '@react-three/drei'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import * as THREE from 'three'
 import type { Agent } from './agent'
 import type { Role, Team } from './workflow'
-import { ROLE_LABEL } from './roles'
 
 const CLICK_PX = 6 // a press that moves less than this is a click, not an orbit drag
 const FOLLOW_DIST = 1.7 // camera distance when following starts (room units)
@@ -31,7 +29,6 @@ export default function AgentFollow({ team, hitboxes, followed, onSelect, onStop
   const camera = useThree((s) => s.camera)
   const controls = useThree((s) => s.controls) as OrbitControlsImpl | null
   const zoomRef = useRef(false)
-  const tagRef = useRef<THREE.Group>(null)
 
   useLayoutEffect(() => {
     zoomRef.current = followed !== null
@@ -105,7 +102,6 @@ export default function AgentFollow({ team, hitboxes, followed, onSelect, onStop
   const delta = useRef(new THREE.Vector3())
   useFrame((_, dt) => {
     const agent: Agent | null = followed ? team[followed] : null
-    if (tagRef.current) tagRef.current.visible = !!agent
     if (!agent || !controls) return
     const k = 1 - Math.exp(-Math.min(dt, 0.1) * 6)
     want.current.set(agent.root.position.x, agent.root.position.y + CHEST, agent.root.position.z)
@@ -121,18 +117,7 @@ export default function AgentFollow({ team, hitboxes, followed, onSelect, onStop
       if (Math.abs(next - FOLLOW_DIST) < 0.02) zoomRef.current = false
     }
     controls.update()
-    if (tagRef.current) tagRef.current.position.set(agent.root.position.x, agent.root.position.y + 0.8, agent.root.position.z)
   })
 
-  return (
-    <group ref={tagRef} visible={false}>
-      {followed && (
-        <Html center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
-          <span className="whitespace-nowrap rounded-full bg-white/90 px-2.5 py-1 text-xs font-medium text-slate-700 shadow-sm">
-            {ROLE_LABEL[followed]}
-          </span>
-        </Html>
-      )}
-    </group>
-  )
+  return null
 }

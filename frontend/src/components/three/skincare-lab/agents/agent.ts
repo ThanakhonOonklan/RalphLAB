@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import type { Role } from './workflow'
 import type { NavGrid } from './nav'
 
 export type Clip =
@@ -22,7 +23,7 @@ export type StationKind = 'seated' | 'bench' | 'stand'
 export type Spot = { pos: THREE.Vector2; yaw: number }
 
 export type AgentConfig = {
-  role: string
+  role: Role
   station: Spot & { kind: StationKind; clip: Clip }
   visit: Spot
   chair?: { node: THREE.Object3D; seated: THREE.Vector3; standing: THREE.Vector3 }

@@ -122,7 +122,6 @@ export function useLabAgentChat(projectId: number | null, userId: string, demo =
         await new Promise<void>((resolve) => window.setTimeout(resolve, 450))
         reply = progress ? demoReply(agent, progress) : 'กำลังเตรียมโครงการทดสอบ D01'
       } else {
-        recordStep('เตรียมข้อความและบริบทสำหรับคำขอ')
         const response = await fetch(`${API}/api/chat/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson, application/json' },

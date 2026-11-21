@@ -32,8 +32,8 @@ type Base = {
 
 export type LabEvent =
   | (Base & { type: "task.started"; jobId: string; taskId: string; owner: AgentRole; title: string; sourceMessageId: string; messageId: string })
-  | (Base & { type: "message.user"; messageId: string; to: AgentRole; text: string; jobId?: string })
-  | (Base & { type: "message.agent"; messageId: string; from: AgentRole; inReplyTo: string; text: string; jobId?: string; activity?: string; assessment?: ChatAssessment })
+  | (Base & { type: "message.user"; messageId: string; to: AgentRole; text: string; answerTo?: string; jobId?: string })
+  | (Base & { type: "message.agent"; messageId: string; from: AgentRole; inReplyTo: string; text: string; jobId?: string; clarification?: boolean; activity?: string; assessment?: ChatAssessment })
   | (Base & { type: "job.group_requested"; jobId: string; taskId: string; messageId: string })
   | (Base & { type: "job.group_declined"; jobId: string })
   | (Base & {
@@ -134,8 +134,8 @@ export type Job = {
 };
 
 export type ChatMessage =
-  | { kind: "user"; messageId: string; threadId: string; to: AgentRole; text: string; sequence: number; jobId?: string }
-  | { kind: "agent"; messageId: string; threadId: string; from: AgentRole; text: string; sequence: number; jobId?: string; taskId?: string; inReplyTo?: string; activity?: string; assessment?: ChatAssessment }
+  | { kind: "user"; messageId: string; threadId: string; to: AgentRole; text: string; sequence: number; answerTo?: string; jobId?: string }
+  | { kind: "agent"; messageId: string; threadId: string; from: AgentRole; text: string; sequence: number; jobId?: string; taskId?: string; inReplyTo?: string; clarification?: boolean; activity?: string; assessment?: ChatAssessment }
   | { kind: "group-invite"; messageId: string; threadId: string; from: AgentRole; jobId: string; text: string; sequence: number }
   /** The sender's "A → B · title · D01" line. Its status is read from `handoffs[handoffId]`. */
   | { kind: "handoff"; messageId: string; threadId: string; handoffId: string; sequence: number }
@@ -206,14 +206,14 @@ function applyEvent(state: LabDemoState, event: LabEvent): LabDemoState {
     case "message.user":
       return {
         ...state,
-        messages: [...state.messages, { kind: "user", messageId: event.messageId, threadId: event.threadId, to: event.to, text: event.text, sequence: event.sequence, jobId: event.jobId }],
+        messages: [...state.messages, { kind: "user", messageId: event.messageId, threadId: event.threadId, to: event.to, text: event.text, answerTo: event.answerTo, sequence: event.sequence, jobId: event.jobId }],
         threads: withParticipant(state, event.threadId, event.experimentId, event.to),
       };
 
     case "message.agent":
       return {
         ...state,
-        messages: [...state.messages, { kind: "agent", messageId: event.messageId, threadId: event.threadId, from: event.from, text: event.text, sequence: event.sequence, jobId: event.jobId, inReplyTo: event.inReplyTo, activity: event.activity, assessment: event.assessment }],
+        messages: [...state.messages, { kind: "agent", messageId: event.messageId, threadId: event.threadId, from: event.from, text: event.text, sequence: event.sequence, jobId: event.jobId, inReplyTo: event.inReplyTo, clarification: event.clarification, activity: event.activity, assessment: event.assessment }],
       };
 
     case "handoff.sent": {
